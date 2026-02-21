@@ -2,6 +2,7 @@
 
 import argparse
 import pickle 
+from constants import BM25_K1
 from tokenizer import Tokenizer
 from search_helper import SearchHelper
 from inverted_index import InvertedIndex
@@ -9,13 +10,23 @@ from inverted_index import InvertedIndex
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
     build_parser = subparsers.add_parser("build", help="Build the inverted index")
     tf_parser = subparsers.add_parser("tf", help="Get the term frequency of a word in a specific document")
     tf_parser.add_argument("document_id", type=int, help="The ID of the document, that is, movie id")
     tf_parser.add_argument("term", type=str, help="The word for which we are checking frequency for")
+    idf_parser = subparsers.add_parser("idf", help="Get the inverse document frequency of a word")
+    idf_parser.add_argument("term", type=str, help="The word to check IDF for")
+    tfidf_parser = subparsers.add_parser("tfidf", help="Get the TF-IDF score for a word in a specific document")
+    tfidf_parser.add_argument("document_id", type=int, help="The ID of the document (movie id)")
+    tfidf_parser.add_argument("term", type=str, help="The word to check TF-IDF for")
+    bm25_tf_parser = subparsers.add_parser("bm25tf", help="Get BM25 TF score for a given document ID and term")
+    bm25_tf_parser.add_argument("document_id", type=int, help="Document ID")
+    bm25_tf_parser.add_argument("term", type=str, help="Term to get BM25 TF score for")
+    bm25_tf_parser.add_argument("k1", type=float, nargs='?', default=BM25_K1, help="Tunable BM25 K1 parameter")
+    bm25_idf_parser = subparsers.add_parser("bm25idf", help="Get BM25 IDF score for a given term")
+    bm25_idf_parser.add_argument("term", type=str, help="Term to get BM25 IDF score for")
 
     args = parser.parse_args()
 
@@ -38,8 +49,34 @@ def main() -> None:
             tokenizer = Tokenizer()
             inverted_index = InvertedIndex(tokenizer)
             inverted_index.load()
-            ans = inverted_index.get_tf(args.document_id, args.term)
-            print(f"TF for term '{args.term}' in document {args.document_id} is: {ans}")
+            tf = inverted_index.get_tf(args.document_id, args.term)
+            print(f"TF for term '{args.term}' in document {args.document_id} is: {tf}")
+        case "idf":
+            tokenizer = Tokenizer()
+            inverted_index = InvertedIndex(tokenizer)
+            inverted_index.load()
+            idf = inverted_index.get_idf(args.term)
+            print(f"IDF for term '{args.term}' across all documents is: {idf:.2f}")
+        case "tfidf":
+            tokenizer = Tokenizer()
+            inverted_index = InvertedIndex(tokenizer)
+            inverted_index.load()
+            tf = inverted_index.get_tf(args.document_id, args.term)
+            idf = inverted_index.get_idf(args.term)
+            tf_idf = tf * idf 
+            print(f"TF-IDF score for term '{args.term}' in document {args.document_id} is: {tf_idf:.2f}")
+        case "bm25tf":
+            tokenizer = Tokenizer()
+            inverted_index = InvertedIndex(tokenizer)
+            inverted_index.load()
+            bm25tf = inverted_index.get_bm25_tf(args.document_id, args.term, args.k1)
+            print(f"BM25 TF score for term '{args.term}' in document {args.document_id} is: {bm25tf:.2f}")
+        case "bm25idf":
+            tokenizer = Tokenizer()
+            inverted_index = InvertedIndex(tokenizer)
+            inverted_index.load()
+            bm25idf = inverted_index.get_bm25_idf(args.term)
+            print(f"BM25 IDF score for term '{args.term}' across all documents is: {bm25idf:.2f}")
         case _:
             parser.print_help()
 

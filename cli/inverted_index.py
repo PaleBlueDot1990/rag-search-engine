@@ -1,6 +1,8 @@
 import os 
 import pickle
 import json 
+import math
+import constants
 from collections import Counter
 from tokenizer import Tokenizer
 
@@ -85,6 +87,47 @@ class InvertedIndex:
         """
         token = self.tokenizer.tokenize_word(term)
         return self.term_frequencies[doc_id][token]
+    
+    def get_idf(self, term : str) -> float:
+        """
+        Get inverse document frequency of the given term 
+        across all documents.
+        """
+        token = self.tokenizer.tokenize_word(term)
+        if token in self.index:
+            term_match_doc_count = len(self.index[token])
+        else:
+            term_match_doc_count = 0
+        
+        total_doc_count = len(self.docmap)
+        return math.log(
+            (total_doc_count + 1) / (term_match_doc_count + 1)
+        )
+    
+    def get_bm25_tf(self, doc_id : int, term : str, k1 : float) -> float:
+        """
+        Get bm25 term frequency of the given term in the given 
+        document ID.
+        """
+        token = self.tokenizer.tokenize_word(term)
+        tf = self.term_frequencies[doc_id][token]
+        bm25 = (tf * (k1 + 1)) / (tf + k1)
+        return bm25 
+    
+    def get_bm25_idf(self, term : str) -> float:
+        """
+        Get bm25 inverse document frequency of the given term 
+        across all documents.
+        """
+        token = self.tokenizer.tokenize_word(term)
+        if token in self.index:
+            term_match_doc_count = len(self.index[token])
+        else:
+            term_match_doc_count = 0
+        
+        total_doc_count = len(self.docmap)
 
-
+        numerator = total_doc_count - term_match_doc_count + 0.5
+        denominator = term_match_doc_count + 0.5
+        return math.log(numerator / denominator + 1)
     
