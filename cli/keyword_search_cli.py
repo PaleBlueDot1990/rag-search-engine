@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from search_helper import get_top_five_movies
+from search_helper import SearchHelper
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -14,7 +14,8 @@ def main() -> None:
 
     match args.command:
         case "search":
-            ans = get_top_five_movies(args.query)
+            search_helper = SearchHelper()
+            ans = search_helper.get_top_five_movies(args.query)
             print(f"Searching for: {args.query}")
             for i in range(0, len(ans)):
                 print(f"{i + 1}. {ans[i]}")
