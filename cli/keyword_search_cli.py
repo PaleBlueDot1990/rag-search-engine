@@ -2,7 +2,7 @@
 
 import argparse
 import pickle 
-from constants import BM25_K1
+from constants import BM25_K1, BM25_B
 from tokenizer import Tokenizer
 from search_helper import SearchHelper
 from inverted_index import InvertedIndex
@@ -24,7 +24,8 @@ def main() -> None:
     bm25_tf_parser = subparsers.add_parser("bm25tf", help="Get BM25 TF score for a given document ID and term")
     bm25_tf_parser.add_argument("document_id", type=int, help="Document ID")
     bm25_tf_parser.add_argument("term", type=str, help="Term to get BM25 TF score for")
-    bm25_tf_parser.add_argument("k1", type=float, nargs='?', default=BM25_K1, help="Tunable BM25 K1 parameter")
+    bm25_tf_parser.add_argument("k1", type=float, nargs='?', default=BM25_K1, help="Tunable BM25 k1 parameter")
+    bm25_tf_parser.add_argument("b", type=float, nargs='?', default=BM25_B, help="Tunable BM25 b parameter")
     bm25_idf_parser = subparsers.add_parser("bm25idf", help="Get BM25 IDF score for a given term")
     bm25_idf_parser.add_argument("term", type=str, help="Term to get BM25 IDF score for")
 
@@ -69,7 +70,7 @@ def main() -> None:
             tokenizer = Tokenizer()
             inverted_index = InvertedIndex(tokenizer)
             inverted_index.load()
-            bm25tf = inverted_index.get_bm25_tf(args.document_id, args.term, args.k1)
+            bm25tf = inverted_index.get_bm25_tf(args.document_id, args.term, args.k1, args.b)
             print(f"BM25 TF score for term '{args.term}' in document {args.document_id} is: {bm25tf:.2f}")
         case "bm25idf":
             tokenizer = Tokenizer()

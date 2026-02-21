@@ -10,25 +10,40 @@ class InvertedIndex:
     def __init__(self, tokenizer: Tokenizer) -> None:
         """
         Initialize the inverted index with an empty index, 
-        empty docmap, empty term_frequency and a tokenizer
+        empty docmap, empty term_frequency, empty doc_lengths
+        and a tokenizer.
         """
         self.index = {}            # key : token       → value : set of document IDs that contain the token 
         self.docmap = {}           # key : document ID → value : movie dict (id, title, description)
         self.term_frequencies = {} # key : document ID → value : counter dictionary (provided by python)
+        self.doc_lengths = {}      # key : document ID → value : length of the document 
         self.tokenizer = tokenizer
     
     def __add_document(self, doc_id : int, text : str) -> None:
         """
-        Tokenize the text, update term frequency of given 
-        document ID, and add each token to the index with 
-        the given document ID.
+        Tokenize the text, update term frequency and document 
+        length of given document ID, and add each token to 
+        the index with the given document ID.
         """
         tokens = self.tokenizer.tokenize_sentence(text)
         self.term_frequencies[doc_id] = Counter(tokens)
+        self.doc_lengths[doc_id] = len(tokens)
         for token in tokens:
             if token not in self.index:
                 self.index[token] = set()
             self.index[token].add(doc_id)
+    
+    def __get_avg_doc_length(self) -> float:
+        """
+        Calculate and cache the average length of all documents 
+        currently in the index.
+        """
+        if hasattr(self, 'avg_doc_length'):
+            return self.avg_doc_length
+            
+        total_length = sum(self.doc_lengths.values())
+        self.avg_doc_length = total_length / len(self.doc_lengths)
+        return self.avg_doc_length
     
     def get_document(self, term : str) -> list[int]:
         """Return a sorted list of document IDs that 
@@ -57,8 +72,9 @@ class InvertedIndex:
     
     def save(self) -> None:
         """
-        Persist the index, docmap and term frequencies 
-        to disk as pickle files in the cache directory.
+        Persist the index, docmap, term frequencies and 
+        document lengths to disk as pickle files in the 
+        cache directory.
         """
         os.makedirs("cache", exist_ok=True)
         with open("cache/index.pkl", "wb") as f:
@@ -67,11 +83,13 @@ class InvertedIndex:
             pickle.dump(self.docmap, f)
         with open("cache/term_frequencies.pkl", "wb") as f:
             pickle.dump(self.term_frequencies, f)
+        with open("cache/doc_lengths.pkl", "wb") as f:
+            pickle.dump(self.doc_lengths, f)
     
     def load(self) -> None:
         """
-        Load the cached index, docmap and term frequencies 
-        from disk.
+        Load the cached index, docmap, term frequencies and 
+        document lengths from disk.
         """
         with open("cache/index.pkl", "rb") as f:
             self.index = pickle.load(f)
@@ -79,6 +97,8 @@ class InvertedIndex:
             self.docmap = pickle.load(f)
         with open("cache/term_frequencies.pkl", "rb") as f:
             self.term_frequencies = pickle.load(f)
+        with open("cache/doc_lengths.pkl", "rb") as f:
+            self.doc_lengths = pickle.load(f)
     
     def get_tf(self, doc_id : int, term : str) -> int:
         """
@@ -104,14 +124,15 @@ class InvertedIndex:
             (total_doc_count + 1) / (term_match_doc_count + 1)
         )
     
-    def get_bm25_tf(self, doc_id : int, term : str, k1 : float) -> float:
+    def get_bm25_tf(self, doc_id : int, term : str, k1 : float, b : float) -> float:
         """
         Get bm25 term frequency of the given term in the given 
         document ID.
         """
         token = self.tokenizer.tokenize_word(term)
         tf = self.term_frequencies[doc_id][token]
-        bm25 = (tf * (k1 + 1)) / (tf + k1)
+        length_norm = 1 - b + b * (self.doc_lengths[doc_id] / self.__get_avg_doc_length())
+        bm25 = (tf * (k1 + 1)) / (tf + k1 * length_norm)
         return bm25 
     
     def get_bm25_idf(self, term : str) -> float:
