@@ -152,3 +152,43 @@ class InvertedIndex:
         denominator = term_match_doc_count + 0.5
         return math.log(numerator / denominator + 1)
     
+    def get_bm25(self, doc_id : int, term : str) -> float:
+        """
+        Calculate the total BM25 score for a given term in a 
+        specific document by multiplying its TF and IDF scores.
+        """
+        bm25_tf = self.get_bm25_tf(doc_id, term, constants.BM25_K1, constants.BM25_B)
+        bm25_idf = self.get_bm25_idf(term)
+        return bm25_tf * bm25_idf
+    
+    def bm25_search(self, query : str, limit : int) -> list[dict]:
+        """
+        Search for documents matching the query tokens, score them 
+        using BM25, and return the top 'limit' results sorted in 
+        descending order of relevance.
+        """
+        scores = {}
+        tokens = self.tokenizer.tokenize_sentence(query)
+
+        for token in tokens:
+            if token not in self.index:
+                continue
+            for doc_id in self.index[token]:
+                if doc_id not in scores:
+                    scores[doc_id] = 0.0
+                scores[doc_id] += self.get_bm25(doc_id, token)
+        
+        sorted_scores = sorted(
+            scores.items(), 
+            key=lambda item: item[1], 
+            reverse=True
+        )
+
+        results = []
+        for doc_id, score in sorted_scores[:limit]:
+            results.append({
+                "doc_id" : doc_id,
+                "title" : self.docmap[doc_id]["title"],
+                "score" : score
+            })
+        return results 
