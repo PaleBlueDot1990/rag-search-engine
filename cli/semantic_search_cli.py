@@ -5,53 +5,59 @@ import json
 import argparse
 import constants
 from semantic_search import SemanticSearch
+from chunked_semantic_search import ChunkedSemanticSearch
 
 
 class SemanticSearchCLI:
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the SemanticSearchCLI with lazy-loaded search components and
         default data paths.
 
-        No arguments.
-
         Attributes:
         semantic_search: Lazily initialized SemanticSearch instance.
+        chunked_semantic_search: Lazily initialized ChunkedSemanticSearch instance.
         data_path: File system path to the source movie data.
         """
         self.semantic_search = None
+        self.chunked_semantic_search = None
         self.data_path = "data/movies.json"
 
-    def _get_semantic_search(self):
+    def _get_semantic_search(self) -> SemanticSearch:
         """
         Internal method to lazy-load and retrieve the SemanticSearch engine
         instance.
-
-        No arguments.
         """
         if self.semantic_search is None:
             self.semantic_search = SemanticSearch()
         return self.semantic_search
+    
+    def _get_chunked_semantic_search(self) -> ChunkedSemanticSearch:
+        """
+        Internal method to lazy-load and retrieve the ChunkedSemanticSearch
+        engine instance.
+        """
+        if self.chunked_semantic_search is None:
+            self.chunked_semantic_search = ChunkedSemanticSearch()
+        return self.chunked_semantic_search
 
-    def _load_movies(self):
+    def _load_movies(self) -> list[dict]:
         """
         Internal method to parse and retrieve the movie list from the JSON data
         file.
-
-        No arguments.
         """
         with open(self.data_path, "r") as f:
             file_data = json.load(f)
         return file_data["movies"]
 
-    def _format_result(self, i, doc):
+    def _format_result(self, i: int, doc: dict) -> str:
         """
         Internal method to format search result metadata into a human-readable
         string for console output.
 
+        Parameters:
         i: The index of the search result.
-        doc: The document dictionary containing title, description, and
-        similarity score.
+        doc: The document dictionary containing title, description, and similarity score.
         """
         title = (
             doc.get("title", "Unknown Title").encode("utf-8").decode("unicode_escape")
@@ -63,23 +69,41 @@ class SemanticSearchCLI:
         )
         score = doc.get("score", 0.0)
         return f"\n{i + 1}. {title} (score: {score:.4f})\n{description}\n"
+    
+    def _format_result2(self, i: int, doc: dict) -> str:
+        """
+        Internal method to format search result metadata into a human-readable
+        string for console output.
 
-    def handle_verify(self, args):
+        Parameters:
+        i: The index of the search result.
+        doc: The document dictionary containing title, description, and similarity score.
+        """
+        title = (
+            doc.get("title", "Unknown Title").encode("utf-8").decode("unicode_escape")
+        )
+        score = doc.get("score", 0.0)
+        return f"\n{i + 1}. {title} (score: {score:.4f})\n"
+
+
+    def handle_verify(self, args: argparse.Namespace) -> None:
         """
         Command handler to display the status and configuration of the loaded
         embedding model.
 
+        Parameters:
         args: Parsed command-line arguments.
         """
         ss = self._get_semantic_search()
         print(f"Model loaded: {ss.model}")
         print(f"Max sequence length: {ss.model.max_seq_length}")
 
-    def handle_embed_text(self, args):
+    def handle_embed_text(self, args: argparse.Namespace) -> None:
         """
         Command handler to generate and display vector dimensions for a raw
         string of text.
 
+        Parameters:
         args: Parsed arguments containing the target text.
         """
         ss = self._get_semantic_search()
@@ -88,11 +112,12 @@ class SemanticSearchCLI:
         print(f"First 3 dimensions: {embedding[:3]}")
         print(f"Dimensions: {embedding.shape[0]}")
 
-    def handle_embed_query(self, args):
+    def handle_embed_query(self, args: argparse.Namespace) -> None:
         """
         Command handler to generate and display vector properties for a
         specific search query.
 
+        Parameters:
         args: Parsed arguments containing the query string.
         """
         ss = self._get_semantic_search()
@@ -101,11 +126,12 @@ class SemanticSearchCLI:
         print(f"First 5 dimensions: {embedding[:5]}")
         print(f"Shape: {embedding.shape}")
 
-    def handle_verify_embeddings(self, args):
+    def handle_verify_embeddings(self, args: argparse.Namespace) -> None:
         """
         Command handler to validate the integrity and shape of the stored
         document embeddings.
 
+        Parameters:
         args: Parsed command-line arguments.
         """
         ss = self._get_semantic_search()
@@ -116,11 +142,12 @@ class SemanticSearchCLI:
             f"Embeddings shape: {embeddings.shape[0]} vectors in {embeddings.shape[1]} dimensions"
         )
 
-    def handle_search(self, args):
+    def handle_search(self, args: argparse.Namespace) -> None:
         """
         Command handler to execute a semantic similarity search across the
         document corpus.
 
+        Parameters:
         args: Parsed arguments containing the query and result limit.
         """
         ss = self._get_semantic_search()
@@ -129,13 +156,14 @@ class SemanticSearchCLI:
 
         results = ss.search(args.query, args.limit)
         for i, doc in enumerate(results):
-            print(self._format_result(i, doc))
+            print(self._format_result2(i, doc))
 
-    def handle_chunk(self, args):
+    def handle_chunk(self, args: argparse.Namespace) -> None:
         """
         Command handler to partition text into overlapping fixed-size token
         segments.
 
+        Parameters:
         args: Parsed arguments containing text, chunk size, and overlap count.
         """
         sz = args.chunk_size
@@ -157,11 +185,12 @@ class SemanticSearchCLI:
         for i, chunk in enumerate(chunks):
             print(f"{i + 1}. {chunk}")
 
-    def handle_semantic_chunk(self, args):
+    def handle_semantic_chunk(self, args: argparse.Namespace) -> None:
         """
         Command handler to partition text into segments based on sentence
         boundaries and semantic coherence.
 
+        Parameters:
         args: Parsed arguments containing text, max chunk size, and sentence
         overlap.
         """
@@ -171,7 +200,8 @@ class SemanticSearchCLI:
             print("Error: --overlap must be less than --max-chunk-size")
             return
 
-        sentences = re.split(r"(?<=[.!?])\s+", args.text.strip())
+        sentences_raw = re.split(r"(?<=[.!?])\s+", args.text.strip())
+        sentences = [s.strip() for s in sentences_raw if s.strip()]
         chunks = []
 
         for i in range(0, len(sentences), sz - ov):
@@ -185,15 +215,42 @@ class SemanticSearchCLI:
         )
         for i, chunk in enumerate(chunks):
             print(f"{i + 1}. {chunk}")
+    
+    def handle_embed_chunks(self, args: argparse.Namespace) -> None:
+        """
+        Command handler to generate and cache vector embeddings for all
+        document chunks in the movie dataset.
+
+        Parameters:
+        args: Parsed command-line arguments.
+        """
+        movies = self._load_movies()
+        css = self._get_chunked_semantic_search()
+        chunked_embeddings = css.load_or_create_chunk_embeddings(movies)
+        print(f"Generated {len(chunked_embeddings)} chunked embeddings")
+
+    def handle_search_chunked(self, args: argparse.Namespace) -> None:
+        """
+        Command handler to execute a chunked semantic search using
+        segment-level matching.
+
+        Parameters:
+        args: Parsed arguments containing the query and result limit.
+        """
+        css = self._get_chunked_semantic_search()
+        movies = self._load_movies()
+        _ = css.load_or_create_chunk_embeddings(movies)
+
+        results = css.search_chunks(args.query, args.limit)
+        for i, doc in enumerate(results):
+            print(self._format_result2(i, doc))
 
 
-def main():
+def main() -> None:
     """
     Entry point for the Semantic Search CLI, responsible for defining the
     command-line interface, parsing arguments, and dispatching to appropriate
     handlers.
-
-    No arguments.
     """
     parser = argparse.ArgumentParser(description="Semantic Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -264,6 +321,21 @@ def main():
         help="Number of overlapping sentences between segments",
     )
 
+    embed_chunks_parser = subparsers.add_parser(
+        "embed_chunks", help="Create chunked vector embeddings"
+    )
+
+    search_chunked_parser = subparsers.add_parser(
+        "search_chunked", help="Execute chunked semantic search"
+    )
+    search_chunked_parser.add_argument("query", type=str, help="Search query string")
+    search_chunked_parser.add_argument(
+        "--limit",
+        type=int,
+        default=constants.DOC_LIMIT,
+        help="Maximum number of results to return",
+    )
+
     args = parser.parse_args()
     cli = SemanticSearchCLI()
 
@@ -275,6 +347,8 @@ def main():
         "search": cli.handle_search,
         "chunk": cli.handle_chunk,
         "semantic_chunk": cli.handle_semantic_chunk,
+        "embed_chunks": cli.handle_embed_chunks,
+        "search_chunked": cli.handle_search_chunked,
     }
 
     if args.command in handlers:
