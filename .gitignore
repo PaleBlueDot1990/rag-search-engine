@@ -12,3 +12,6 @@ cache
 
 # Data 
 /data/
+
+# Env file 
+.env

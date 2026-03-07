@@ -87,7 +87,7 @@ class HybridSearchCLI:
         """
 
         hs = self._get_hybrid_search()
-        results = hs.rrf_search(args.query, args.k, args.limit)
+        results = hs.rrf_search(args.query, args.enhance, args.k, args.limit)
 
         for i, doc in enumerate(results):
             title = (
@@ -163,6 +163,12 @@ def main() -> None:
         type=int,
         default=5,
         help="Maximum results to return (default: 5)"
+    )
+    rrf_search_parser.add_argument(
+        "--enhance",
+        type=str,
+        choices=["spell", "rewrite", "expand"],
+        help="Query enhancement method"
     )
 
     args = parser.parse_args()

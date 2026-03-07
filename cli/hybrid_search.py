@@ -1,4 +1,8 @@
 import numpy as np
+import prompts
+import os
+from google import genai
+from dotenv import load_dotenv
 from inverted_index import InvertedIndex
 from tokenizer import Tokenizer
 from chunked_semantic_search import ChunkedSemanticSearch
@@ -16,6 +20,12 @@ class HybridSearch:
         tokenizer: Tokenizer instance for keyword processing.
         index: InvertedIndex instance for BM25 keyword search.
         """
+        load_dotenv()
+        self.api_key = os.environ.get("GEMINI_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("GEMINI_API_KEY environment variable not set")  
+
+        self.client = genai.Client(api_key=self.api_key)
         self.documents = documents
 
         self.css = ChunkedSemanticSearch()
@@ -81,7 +91,7 @@ class HybridSearch:
         hybrid_results.sort(key=lambda x: x["hybrid_score"], reverse=True)
         return hybrid_results[:limit]
 
-    def rrf_search(self, query: str, k: int = 60, limit: int = 10) -> list[dict]:
+    def rrf_search(self, query: str, enhance: str, k: int = 60, limit: int = 10) -> list[dict]:
         """
         Execute a hybrid search using Reciprocal Rank Fusion (RRF).
 
@@ -90,6 +100,8 @@ class HybridSearch:
         k: RRF constant (default 60).
         limit: Maximum number of results to return.
         """
+        query = self._enhance_query(query, enhance)
+
         search_limit = 500 * limit
         bm25_results = self.index.bm25_search(query, search_limit)
         css_results = self.css.search_chunks(query, search_limit)
@@ -121,6 +133,32 @@ class HybridSearch:
 
         results.sort(key=lambda x: x["rrf_score"], reverse=True)
         return results[:limit]
+
+    def _enhance_query(self, query: str, enhance: str) -> str:
+        """
+        Internal method to enhance the search query using LLM-based techniques.
+
+        Parameters:
+        query: The original search string.
+        enhance: The enhancement method ('spell', 'rewrite', 'expand').
+        """
+        prompt_map = {
+            "spell": prompts.SPELL_CHECK_PROMPT,
+            "rewrite": prompts.REWRITE_PROMPT,
+            "expand": prompts.EXPAND_PROMPT,
+        }
+
+        if enhance not in prompt_map:
+            return query
+
+        response = self.client.models.generate_content(
+            model="gemma-3-27b-it",
+            contents=prompt_map[enhance].format(query=query)
+        )
+
+        enhanced_query = response.text
+        print(f"Enhanced query ({enhance}): '{query}' -> '{enhanced_query}'\n")
+        return enhanced_query
 
     def get_normalized_scores(self, scores: list[float]) -> list[float]:
         """

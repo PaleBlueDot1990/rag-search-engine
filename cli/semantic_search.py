@@ -42,7 +42,7 @@ class SemanticSearch:
             text = f"{title}: {description}"
             texts.append(text)
 
-        self.embeddings = self.model.encode(texts, show_progress_bar=True)
+        self.embeddings = self.model.encode(texts)
         np.save(os.path.join(constants.CACHE_DIR, "movie_embeddings.npy"), self.embeddings)
         return self.embeddings
 

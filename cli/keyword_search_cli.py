@@ -160,10 +160,9 @@ class KeywordSearchCLI:
         _, index = self._get_resources()
         index.load()
         results = index.bm25_search(args.query, args.limit)
-        print(f"BM25 search results for: '{args.query}'")
         for i, res in enumerate(results):
             print(
-                f"{i + 1}. ({res['id']}) {res['title']} - Score: {res['score']:.4f}"
+                f"{i + 1}. {res['title']} (score: {res['score']:.4f})\n\n"
             )
 
 
