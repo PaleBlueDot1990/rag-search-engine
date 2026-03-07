@@ -94,34 +94,44 @@ class InvertedIndex:
         """
         Serialize and persist the current state of the index, document map, and
         statistical data to serialized binary files in the cache directory.
-
-        No arguments.
         """
-        os.makedirs("cache", exist_ok=True)
-        with open("cache/index.pkl", "wb") as f:
+        os.makedirs(constants.CACHE_DIR, exist_ok=True)
+        with open(os.path.join(constants.CACHE_DIR, "index.pkl"), "wb") as f:
             pickle.dump(self.index, f)
-        with open("cache/docmap.pkl", "wb") as f:
+        with open(os.path.join(constants.CACHE_DIR, "docmap.pkl"), "wb") as f:
             pickle.dump(self.docmap, f)
-        with open("cache/term_frequencies.pkl", "wb") as f:
+        with open(os.path.join(constants.CACHE_DIR, "term_frequencies.pkl"), "wb") as f:
             pickle.dump(self.term_frequencies, f)
-        with open("cache/doc_lengths.pkl", "wb") as f:
+        with open(os.path.join(constants.CACHE_DIR, "doc_lengths.pkl"), "wb") as f:
             pickle.dump(self.doc_lengths, f)
 
     def load(self) -> None:
         """
         Deserialize and load the index, document map, and statistical data from
         binary storage into memory.
-
-        No arguments.
         """
-        with open("cache/index.pkl", "rb") as f:
+        with open(os.path.join(constants.CACHE_DIR, "index.pkl"), "rb") as f:
             self.index = pickle.load(f)
-        with open("cache/docmap.pkl", "rb") as f:
+        with open(os.path.join(constants.CACHE_DIR, "docmap.pkl"), "rb") as f:
             self.docmap = pickle.load(f)
-        with open("cache/term_frequencies.pkl", "rb") as f:
+        with open(os.path.join(constants.CACHE_DIR, "term_frequencies.pkl"), "rb") as f:
             self.term_frequencies = pickle.load(f)
-        with open("cache/doc_lengths.pkl", "rb") as f:
+        with open(os.path.join(constants.CACHE_DIR, "doc_lengths.pkl"), "rb") as f:
             self.doc_lengths = pickle.load(f)
+
+    def load_or_create(self) -> None:
+        """
+        Load existing index from disk or build and save a new one if any cache
+        file is missing.
+        """
+        required_files = ["index.pkl", "docmap.pkl", "term_frequencies.pkl", "doc_lengths.pkl"]
+        all_exist = all(os.path.exists(os.path.join(constants.CACHE_DIR, f)) for f in required_files)
+        
+        if all_exist:
+            self.load()
+        else:
+            self.build()
+            self.save()
 
     def get_tf(self, doc_id: int, term: str) -> int:
         """
@@ -224,7 +234,7 @@ class InvertedIndex:
         for doc_id, score in sorted_scores[:limit]:
             results.append(
                 {
-                    "doc_id": doc_id,
+                    "id": doc_id,
                     "title": self.docmap[doc_id]["title"],
                     "score": score,
                 }
