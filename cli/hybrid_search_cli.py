@@ -1,6 +1,10 @@
 import argparse
 import json
 import constants
+import os 
+import prompts
+from google import genai
+from dotenv import load_dotenv
 from hybrid_search import HybridSearch
 
 
@@ -35,6 +39,41 @@ class HybridSearchCLI:
             movies = self._load_movies()
             self.hybrid_search = HybridSearch(movies)
         return self.hybrid_search
+
+    def _evaluate_results(self, query: str, results: list[dict]) -> None:
+        load_dotenv()
+        self.api_key = os.environ.get("GEMINI_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("GEMINI_API_KEY environment variable not set")  
+        self.client = genai.Client(api_key=self.api_key)
+
+        formatted_results = ""
+        for doc in results:
+            formatted_results += f"Movie Id: {doc['id']}\n"
+            formatted_results += f"Movie Title: {doc['title']}\n"
+            formatted_results += f"Movie Description: {doc['description']}\n\n"
+        
+        response = self.client.models.generate_content(
+            model="gemma-3-27b-it",
+            contents=prompts.EVALUATE_PROMPT.format(
+                query=query, 
+                formatted_results=formatted_results, 
+            )
+        )
+
+        try:
+            scores = json.loads(response.text.strip())
+            print("\n--- LLM Evaluation ---")
+            for i, result in enumerate(results):
+                try:
+                    title = result["title"]
+                    score = scores[i]
+                    print(f"{i + 1}. {title}: {score}/3")
+                except IndexError:
+                    pass
+        except json.JSONDecodeError:
+            print("Failed to parse LLM JSON response.")
+
 
     def handle_normalize(self, args: argparse.Namespace) -> None:
         """
@@ -83,7 +122,7 @@ class HybridSearchCLI:
         Command handler to execute a rrf hybrid search.
 
         Parameters:
-        args: Parsed arguments containing query, k, and limit.
+        args: Parsed arguments containing query, k, and limit, query enhance method, and llm reranking method.
         """
 
         hs = self._get_hybrid_search()
@@ -108,6 +147,9 @@ class HybridSearchCLI:
                 print(f"Cross Encoder Score: {cross_encoder_score}")
             print(f"RRF Score: {rrf_score:.4f}")
             print(f"BM25 Rank: {bm25_rank}, Semantic Rank: {css_rank}\n\n")
+
+        if args.evaluate == True:
+            self._evaluate_results(args.query, results)
 
 
 def main() -> None:
@@ -180,6 +222,11 @@ def main() -> None:
         type=str,
         choices=["individual", "batch", "cross_encoder"],
         help="Reranking method"
+    )
+    rrf_search_parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Evaluate the returned results using LLM"
     )
 
     args = parser.parse_args()
