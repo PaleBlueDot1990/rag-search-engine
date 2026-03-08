@@ -10,8 +10,5 @@ cache
 # Virtual environments
 .venv
 
-# Data 
-/data/
-
 # Env file 
 .env
