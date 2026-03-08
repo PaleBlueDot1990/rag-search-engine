@@ -19,6 +19,7 @@ class HybridSearchCLI:
         data_path: File system path to the source movie data.
         """
         self.hybrid_search = None
+        self.client = None
         self.data_path = "data/movies.json"
 
     def _load_movies(self) -> list[dict]:
@@ -39,13 +40,28 @@ class HybridSearchCLI:
             movies = self._load_movies()
             self.hybrid_search = HybridSearch(movies)
         return self.hybrid_search
+    
+    def _get_genai_client(self) -> genai.Client:
+        """
+        Internal method to lazy-load and retrieve the Gemini API client.
+        """
+        if self.client is None:
+            load_dotenv()
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                raise RuntimeError("GEMINI_API_KEY environment variable not set")  
+            self.client = genai.Client(api_key=api_key)
+        return self.client
 
     def _evaluate_results(self, query: str, results: list[dict]) -> None:
-        load_dotenv()
-        self.api_key = os.environ.get("GEMINI_API_KEY")
-        if not self.api_key:
-            raise RuntimeError("GEMINI_API_KEY environment variable not set")  
-        self.client = genai.Client(api_key=self.api_key)
+        """
+        Internal method to evaluate the returned search results using an LLM.
+
+        Parameters:
+        query: The original search string.
+        results: The retrieved document results to evaluate.
+        """
+        client = self._get_genai_client()
 
         formatted_results = ""
         for doc in results:
@@ -124,7 +140,6 @@ class HybridSearchCLI:
         Parameters:
         args: Parsed arguments containing query, k, and limit, query enhance method, and llm reranking method.
         """
-
         hs = self._get_hybrid_search()
         results = hs.rrf_search(args.query, args.enhance, args.rerank_method, args.k, args.limit)
 
