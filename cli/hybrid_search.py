@@ -1,8 +1,12 @@
 import numpy as np
 import prompts
 import os
+import time
+import json
+import math
 from google import genai
 from dotenv import load_dotenv
+from sentence_transformers import CrossEncoder
 from inverted_index import InvertedIndex
 from tokenizer import Tokenizer
 from chunked_semantic_search import ChunkedSemanticSearch
@@ -91,7 +95,7 @@ class HybridSearch:
         hybrid_results.sort(key=lambda x: x["hybrid_score"], reverse=True)
         return hybrid_results[:limit]
 
-    def rrf_search(self, query: str, enhance: str, k: int = 60, limit: int = 10) -> list[dict]:
+    def rrf_search(self, query: str, enhance: str, rerank_method: str, k: int = 60, limit: int = 10) -> list[dict]:
         """
         Execute a hybrid search using Reciprocal Rank Fusion (RRF).
 
@@ -102,7 +106,11 @@ class HybridSearch:
         """
         query = self._enhance_query(query, enhance)
 
-        search_limit = 500 * limit
+        if rerank_method is not None:
+            search_limit = 5 * limit
+        else:
+            search_limit = 500 * limit
+
         bm25_results = self.index.bm25_search(query, search_limit)
         css_results = self.css.search_chunks(query, search_limit)
 
@@ -123,15 +131,26 @@ class HybridSearch:
             
             doc = next(d for d in self.documents if d["id"] == doc_id)
             title = doc["title"]
+            description = doc["description"]
 
             results.append({
+                "id": doc_id,
                 "title": title,
+                "description": description,
                 "rrf_score": rrf_score,
                 "bm25_rank": bm25_rank,
                 "css_rank": css_rank,
             })
 
         results.sort(key=lambda x: x["rrf_score"], reverse=True)
+        results = results[:search_limit]
+
+        if rerank_method == "individual":
+            results = self._rerank_results_individual(query, results)  
+        elif rerank_method == "batch":
+            results = self._rerank_results_batch(query, results)
+        elif rerank_method == "cross_encoder":
+            results = self._rerank_results_cross_encoder(query, results)
         return results[:limit]
 
     def _enhance_query(self, query: str, enhance: str) -> str:
@@ -189,5 +208,97 @@ class HybridSearch:
         """
         return (alpha * bm25_score) + ((1 - alpha) * semantic_score)
     
-    
+    def _rerank_results_individual(self, query: str, results: list[dict]) -> list[dict]:
+        """
+        Internal method to rerank the rrf-ranked results.
+        LLM model reranks each result individually.
 
+        Parameters:
+        query: The original search string. 
+        results: The rrf-ranked list of documents.
+        """
+        for i, doc in enumerate(results):
+            response = self.client.models.generate_content(
+                model="gemma-3-27b-it",
+                contents=prompts.INDIVIDUAL_RERANK_PROMPT.format(
+                    query=query, 
+                    title=doc["title"], 
+                    description=doc["description"]
+                )
+            )
+            try:
+                results[i]["llm_score"] = float(response.text.strip())
+            except ValueError:
+                results[i]["llm_score"] = 0.0
+
+            print(f"Got rank for {i + 1}th document. Now sleeping for 5 seconds!") 
+            time.sleep(5)
+
+        results.sort(key=lambda x: x.get("llm_score", 0.0), reverse=True)
+        return results
+    
+    def _rerank_results_batch(self, query: str, results: list[dict]) -> list[dict]:
+        """
+        Internal method to rerank the rrf-ranked results.
+        LLM model reranks results in batch.
+
+        Parameters:
+        query: The original search string. 
+        results: The rrf-ranked list of documents.
+        """
+
+        doc_list_str = ""
+        for doc in results:
+            doc_list_str += f"Movie Id: {doc['id']}\n"
+            doc_list_str += f"Movie Title: {doc['title']}\n"
+            doc_list_str += f"Movie Description: {doc['description']}\n\n"
+        
+        response = self.client.models.generate_content(
+            model="gemma-3-27b-it",
+            contents=prompts.BATCH_RERANK_PROMPT.format(
+                query=query, 
+                doc_list_str=doc_list_str, 
+            )
+        )
+
+        try:
+            ranked_ids = json.loads(response.text.strip())
+            for i, doc_id in enumerate(ranked_ids):
+                try:
+                    doc = next(d for d in results if d["id"] == doc_id)
+                    doc["llm_score"] = len(results) - i
+                except StopIteration:
+                    pass
+        except json.JSONDecodeError:
+            print("Failed to parse LLM JSON response.")
+
+        results.sort(key=lambda x: x.get("llm_score", 0), reverse=True)
+        return results
+    
+    def _rerank_results_cross_encoder(self, query: str, results: list[dict]) -> list[dict]:
+        """
+        Internal method to rerank the rrf-ranked results.
+        Cross encoding is used to rank the results.
+
+        Parameters:
+        query: The original search string. 
+        results: The rrf-ranked list of documents.
+        """
+
+        pairs = []
+        for doc in results:
+            title = doc.get('title', '')
+            description = doc.get('description', '')
+            pairs.append(
+                [query, f"{title} - {description}"]
+            )
+
+        cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+        scores = cross_encoder.predict(pairs)
+
+        for i, doc in enumerate(results):
+            doc["cross_encoder_score"] = float(scores[i])
+        
+        results.sort(key=lambda x: x.get("cross_encoder_score", -1 * math.inf), reverse=True)
+        return results
+    

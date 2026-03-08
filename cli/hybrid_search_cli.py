@@ -87,7 +87,7 @@ class HybridSearchCLI:
         """
 
         hs = self._get_hybrid_search()
-        results = hs.rrf_search(args.query, args.enhance, args.k, args.limit)
+        results = hs.rrf_search(args.query, args.enhance, args.rerank_method, args.k, args.limit)
 
         for i, doc in enumerate(results):
             title = (
@@ -95,14 +95,19 @@ class HybridSearchCLI:
                 .encode("utf-8")
                 .decode("unicode_escape")
             )
+            llm_rank = (i + 1)
+            cross_encoder_score = doc.get("cross_encoder_score", 0.0)
             rrf_score = doc.get("rrf_score", 0.0)
             bm25_rank = doc.get("bm25_rank", 0)
             css_rank = doc.get("css_rank", 0)
 
             print(f"{i + 1}. {title}")
+            if args.rerank_method == "individual" or args.rerank_method == "batch":
+                print(f"LLM Ranking : {llm_rank}")
+            elif args.rerank_method == "cross_encoder":
+                print(f"Cross Encoder Score: {cross_encoder_score}")
             print(f"RRF Score: {rrf_score:.4f}")
             print(f"BM25 Rank: {bm25_rank}, Semantic Rank: {css_rank}\n\n")
-
 
 
 def main() -> None:
@@ -170,6 +175,12 @@ def main() -> None:
         choices=["spell", "rewrite", "expand"],
         help="Query enhancement method"
     )
+    rrf_search_parser.add_argument(
+        "--rerank-method",
+        type=str,
+        choices=["individual", "batch", "cross_encoder"],
+        help="Reranking method"
+    )
 
     args = parser.parse_args()
     cli = HybridSearchCLI()
@@ -183,7 +194,6 @@ def main() -> None:
             cli.handle_rrf_search(args)
         case _:
             parser.print_help()
-
 
 if __name__ == "__main__":
     main()

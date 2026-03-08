@@ -39,3 +39,33 @@ Examples:
 
 User query: "{query}"
 """
+
+INDIVIDUAL_RERANK_PROMPT = """Rate how well this movie matches the search query.
+
+Query: "{query}"
+Movie Title: "{title}"
+Movie Description: "{description}"
+
+Consider:
+- Direct relevance to query
+- User intent (what they're looking for)
+- Content appropriateness
+
+Rate 0-10 (10 = perfect match).
+Output ONLY the number in your response, no other text or explanation.
+"""
+
+BATCH_RERANK_PROMPT = """Rank the movies listed below by relevance to the following search query. 
+For each movie, you are provided with the movie ID, movie title, and movie description.
+
+Query: 
+"{query}"
+
+Movies:
+{doc_list_str}
+
+Return ONLY the movie IDs in order of relevance (best match first). Return a valid JSON list, nothing else.
+
+For example:
+[75, 12, 34, 2, 1]
+"""
